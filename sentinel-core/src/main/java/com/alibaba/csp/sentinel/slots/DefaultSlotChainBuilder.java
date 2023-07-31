@@ -49,6 +49,8 @@ public class DefaultSlotChainBuilder implements SlotChainBuilder {
             chain.addLast((AbstractLinkedProcessorSlot<?>) slot);
         }
 
+
+        // DefaultProcessorSlotChain -> NodeSelectorSlot -> ClusterBuilderSlot -> LogSlot -> StatisticSlot -> AuthoritySlot -> SystemSlot -> FlowSlot -> DefaultCircuitBreakerSlot -> DegradeSlot
         return chain;
     }
 }

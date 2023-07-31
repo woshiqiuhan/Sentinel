@@ -33,7 +33,7 @@ public final class SlotChainProvider {
      * The load and pick process is not thread-safe, but it's okay since the method should be only invoked
      * via {@code lookProcessChain} in {@link com.alibaba.csp.sentinel.CtSph} under lock.
      *
-     * @return new created slot chain
+     * @return new created slot chain, DefaultProcessorSlotChain -> NodeSelectorSlot -> ClusterBuilderSlot -> LogSlot -> StatisticSlot -> AuthoritySlot -> SystemSlot -> FlowSlot -> DefaultCircuitBreakerSlot -> DegradeSlot
      */
     public static ProcessorSlotChain newSlotChain() {
         if (slotChainBuilder != null) {
