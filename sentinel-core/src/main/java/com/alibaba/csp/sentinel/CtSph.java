@@ -120,16 +120,20 @@ public class CtSph implements Sph {
         if (context instanceof NullContext) {
             // The {@link NullContext} indicates that the amount of context has exceeded the threshold,
             // so here init the entry only. No rule checking will be done.
+
+            // 此处代表缓存的上下文数量超过了阈值，所以只初始化entry，不会进行规则检查
             return new CtEntry(resourceWrapper, null, context);
         }
 
         if (context == null) {
             // Using default context.
+            // 未使用 ContextUtil.enter(resource, origin)，即未设置过上下文，使用默认上下文
             context = InternalContextUtil.internalEnter(Constants.CONTEXT_DEFAULT_NAME);
         }
 
         // Global switch is close, no rule checking will do.
         if (!Constants.ON) {
+            // 全局开关关闭，不会进行规则检查
             return new CtEntry(resourceWrapper, null, context);
         }
 
@@ -145,6 +149,7 @@ public class CtSph implements Sph {
 
         Entry e = new CtEntry(resourceWrapper, chain, context, count, args);
         try {
+            // DefaultProcessorSlotChain -> NodeSelectorSlot -> ClusterBuilderSlot -> LogSlot -> StatisticSlot -> AuthoritySlot -> SystemSlot -> FlowSlot -> DefaultCircuitBreakerSlot -> DegradeSlot
             chain.entry(context, resourceWrapper, null, count, prioritized, args);
         } catch (BlockException e1) {
             e.exit(count, args);
@@ -192,6 +197,7 @@ public class CtSph implements Sph {
      * @return {@link ProcessorSlotChain} of the resource
      */
     ProcessorSlot<Object> lookProcessChain(ResourceWrapper resourceWrapper) {
+        // 一种资源对应一条链路，仅在第一次调用时创建
         ProcessorSlotChain chain = chainMap.get(resourceWrapper);
         if (chain == null) {
             synchronized (LOCK) {
