@@ -52,12 +52,16 @@ final class AuthorityRuleChecker {
             contain = exactlyMatch;
         }
 
+        // contain 表示当前请求来源是否在黑白名单中
+
         int strategy = rule.getStrategy();
         if (strategy == RuleConstant.AUTHORITY_BLACK && contain) {
+            // 如果是黑名单，且当前请求来源在黑名单中，则请求不通过
             return false;
         }
 
         if (strategy == RuleConstant.AUTHORITY_WHITE && !contain) {
+            // 如果是白名单，且当前请求来源不在白名单中，则请求不通过
             return false;
         }
 
