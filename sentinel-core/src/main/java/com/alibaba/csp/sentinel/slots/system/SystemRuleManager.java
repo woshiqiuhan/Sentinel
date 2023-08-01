@@ -292,6 +292,7 @@ public final class SystemRuleManager {
             return;
         }
         // Ensure the checking switch is on.
+        // 系统校验总开关
         if (!checkSystemStatus.get()) {
             return;
         }
@@ -301,13 +302,13 @@ public final class SystemRuleManager {
             return;
         }
 
-        // total qps
+        // total qps 系统层级 qps
         double currentQps = Constants.ENTRY_NODE.passQps();
         if (currentQps + count > qps) {
             throw new SystemBlockException(resourceWrapper.getName(), "qps");
         }
 
-        // total thread
+        // total thread 系统层级总线程数
         int currentThread = Constants.ENTRY_NODE.curThreadNum();
         if (currentThread > maxThread) {
             throw new SystemBlockException(resourceWrapper.getName(), "thread");
