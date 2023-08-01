@@ -15,6 +15,9 @@
  */
 package com.alibaba.csp.sentinel.node;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +28,8 @@ import com.alibaba.csp.sentinel.slots.statistic.metric.ArrayMetric;
 import com.alibaba.csp.sentinel.slots.statistic.metric.Metric;
 import com.alibaba.csp.sentinel.util.TimeUtil;
 import com.alibaba.csp.sentinel.util.function.Predicate;
+
+import javax.swing.text.DateFormatter;
 
 /**
  * <p>The statistic node keep three kinds of real-time statistics metrics:</p>
@@ -286,9 +291,12 @@ public class StatisticNode implements Node {
 
     @Override
     public long tryOccupyNext(long currentTime, int acquireCount, double threshold) {
+        // 允许等待的最大数量
         double maxCount = threshold * IntervalProperty.INTERVAL / 1000;
+        // 获取目前处于等待中的数量
         long currentBorrow = rollingCounterInSecond.waiting();
         if (currentBorrow >= maxCount) {
+            // 达到阈值，不允许加入等待
             return OccupyTimeoutProperty.getOccupyTimeout();
         }
 
@@ -303,12 +311,27 @@ public class StatisticNode implements Node {
          */
         long currentPass = rollingCounterInSecond.pass();
         while (earliestTime < currentTime) {
+            // 需求等待多久进入到下一个窗口
             long waitInMs = idx * windowLength + windowLength - currentTime % windowLength;
             if (waitInMs >= OccupyTimeoutProperty.getOccupyTimeout()) {
+                // 如果等待时间超过500ms，不允许加入等待
                 break;
             }
+
+            /*
+             * eg：阈值100
+             *
+             * 最近1s中，前500ms(0-499)通过请求数30，后500ms(500-999)通过请求数70，当前请求时间为888ms
+             *
+             * 进入时发现当前1s请求数为100，达到阈值，尝试占用邻近1秒的令牌，即500ms到1500ms的令牌
+             * 而500ms到1000ms的占用数为70，1000ms到1500ms为未来窗口，获取未来窗口的占用数
+             * 计算500ms到1500ms的请求数是否达到阈值，如果达到阈值，不允许加入等待，如果未达到，则等待到下一个窗口(1000-1500)执行
+             */
+
+            // 计算上一个窗口的通过数量
             long windowPass = rollingCounterInSecond.getWindowPass(earliestTime);
             if (currentPass + currentBorrow + acquireCount - windowPass <= maxCount) {
+                // 如果下一个窗口的通过数量小于阈值，允许加入等待
                 return waitInMs;
             }
             earliestTime += windowLength;
@@ -333,5 +356,25 @@ public class StatisticNode implements Node {
     public void addOccupiedPass(int acquireCount) {
         rollingCounterInMinute.addOccupiedPass(acquireCount);
         rollingCounterInMinute.addPass(acquireCount);
+    }
+
+    public static void main(String[] args) throws Exception {
+        double threshold = 1;
+
+        StatisticNode statisticNode = new StatisticNode();
+
+        System.out.println(date2Str(new Date()));
+        statisticNode.addPassRequest(30);
+
+        Thread.sleep(500);
+        System.out.println(date2Str(new Date()));
+        statisticNode.addPassRequest(70);
+
+        statisticNode.tryOccupyNext(new Date().getTime(), 2, threshold);
+    }
+
+    public static String date2Str(Date date) {
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+        return dateFormat.format(date);
     }
 }

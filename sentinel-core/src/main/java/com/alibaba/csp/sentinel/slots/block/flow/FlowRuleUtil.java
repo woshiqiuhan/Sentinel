@@ -131,6 +131,7 @@ public final class FlowRuleUtil {
 
     private static TrafficShapingController generateRater(/*@Valid*/ FlowRule rule) {
         if (rule.getGrade() == RuleConstant.FLOW_GRADE_QPS) {
+            // 针对QPS的流控规则
             switch (rule.getControlBehavior()) {
                 case RuleConstant.CONTROL_BEHAVIOR_WARM_UP:
                     return new WarmUpController(rule.getCount(), rule.getWarmUpPeriodSec(),
@@ -145,6 +146,8 @@ public final class FlowRuleUtil {
                     // Default mode or unknown mode: default traffic shaping controller (fast-reject).
             }
         }
+
+        // 线程数流控规则 或者 快速失败处理方式 直接走默认控制器
         return new DefaultController(rule.getCount(), rule.getGrade());
     }
 

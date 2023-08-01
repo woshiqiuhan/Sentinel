@@ -54,9 +54,18 @@ public final class RuleConstant {
     // eg：当前资源A，链路为 B -> A (资源B请求资源A)，阈值为5，若资源B每秒请求资源A的次数超过5，则资源A被限流，而资源B请求不会被限流
     public static final int STRATEGY_CHAIN = 2;
 
+    /**
+     * 流控效果，流量整形，即触发流控后的行为
+     */
+    // 0：快速失败，直接失败，抛出异常
     public static final int CONTROL_BEHAVIOR_DEFAULT = 0;
+    // 1：预热模式，配置中存在一个预热时间，在预热时间内，将阈值线性提升到目标值，初始阈值 = 配置阈值 / 加载冷因子，其中 默认加载冷因子 = 3
+    // 这种方式可以平缓拉高系统水位，避免突发流量对当前处于低水位的系统的可用性造成破坏
+    // eg：配置阈值为10，预热时间为5秒，则初始阈值为 10 / 3 = 3，5秒后达到10
     public static final int CONTROL_BEHAVIOR_WARM_UP = 1;
+    // 2：排队等待，即请求进入排队队列，根据队列的情况，决定是否限流，可以设置队列大小，当队列满了之后，请求会被拒绝
     public static final int CONTROL_BEHAVIOR_RATE_LIMITER = 2;
+    // 3：预热 + 排队等待模式，结合预热模式和排队等待
     public static final int CONTROL_BEHAVIOR_WARM_UP_RATE_LIMITER = 3;
 
     public static final int DEFAULT_BLOCK_STRATEGY = 0;

@@ -69,19 +69,25 @@ public class FlowRuleChecker {
         }
 
         if (rule.isClusterMode()) {
+            // 集群限流处理
             return passClusterCheck(rule, context, node, acquireCount, prioritized);
         }
 
+        // 单机限流处理
         return passLocalCheck(rule, context, node, acquireCount, prioritized);
     }
 
     private static boolean passLocalCheck(FlowRule rule, Context context, DefaultNode node, int acquireCount,
                                           boolean prioritized) {
+        // 首先根据限流规则选择限流检验的节点
         Node selectedNode = selectNodeByRequesterAndStrategy(rule, context, node);
         if (selectedNode == null) {
             return true;
         }
 
+        /**
+         * 根据限流规则生成对应的限流器：{@link com.alibaba.csp.sentinel.slots.block.flow.FlowRuleUtil#generateRater}
+         */
         return rule.getRater().canPass(selectedNode, acquireCount, prioritized);
     }
 
@@ -94,6 +100,7 @@ public class FlowRuleChecker {
         }
 
         if (strategy == RuleConstant.STRATEGY_RELATE) {
+            // 流控模式为关联模式，直接返回对应关联资源的统计节点
             return ClusterBuilderSlot.getClusterNode(refResource);
         }
 
@@ -119,15 +126,19 @@ public class FlowRuleChecker {
         String origin = context.getOrigin();
 
         if (limitApp.equals(origin) && filterOrigin(origin)) {
+            // 当前规则针对对应来源应用进行限流
             if (strategy == RuleConstant.STRATEGY_DIRECT) {
                 // Matches limit origin, return origin statistic node.
+                // 如果是直接限流模式，直接返回对应来源应用的统计节点
                 return context.getOriginNode();
             }
 
             return selectReferenceNode(rule, context, node);
         } else if (RuleConstant.LIMIT_APP_DEFAULT.equals(limitApp)) {
+            // 当前规则针对所有来源应用进行限流
             if (strategy == RuleConstant.STRATEGY_DIRECT) {
                 // Return the cluster node.
+                // 返回当前资源的统计节点
                 return node.getClusterNode();
             }
 

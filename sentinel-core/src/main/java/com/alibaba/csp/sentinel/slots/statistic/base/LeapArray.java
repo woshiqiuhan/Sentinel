@@ -118,8 +118,10 @@ public abstract class LeapArray<T> {
             return null;
         }
 
+        // 当前时间戳对应的bucket的index
         int idx = calculateTimeIdx(timeMillis);
         // Calculate current bucket start time.
+        // 当前时间戳对应的bucket的开始时间
         long windowStart = calculateWindowStart(timeMillis);
 
         /*
@@ -144,6 +146,8 @@ public abstract class LeapArray<T> {
                  * then try to update circular array via a CAS operation. Only one thread can
                  * succeed to update, while other threads yield its time slice.
                  */
+
+                // OccupiableBucketLeapArray.newEmptyBucket 实现中对当前
                 WindowWrap<T> window = new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
                 if (array.compareAndSet(idx, null, window)) {
                     // Successfully updated, return the created bucket.

@@ -34,7 +34,7 @@ public interface ProcessorSlot<T> {
      * @param resourceWrapper current resource
      * @param param           generics parameter, usually is a {@link com.alibaba.csp.sentinel.node.Node}
      * @param count           tokens needed
-     * @param prioritized     whether the entry is prioritized
+     * @param prioritized     whether the entry is prioritized 条件是否优先顺序
      * @param args            parameters of the original call
      * @throws Throwable blocked exception or unexpected error
      */

@@ -20,6 +20,7 @@ import com.alibaba.csp.sentinel.node.OccupyTimeoutProperty;
 import com.alibaba.csp.sentinel.slots.block.RuleConstant;
 import com.alibaba.csp.sentinel.slots.block.flow.PriorityWaitException;
 import com.alibaba.csp.sentinel.slots.block.flow.TrafficShapingController;
+import com.alibaba.csp.sentinel.slots.statistic.StatisticSlot;
 import com.alibaba.csp.sentinel.util.TimeUtil;
 
 /**
@@ -32,7 +33,13 @@ public class DefaultController implements TrafficShapingController {
 
     private static final int DEFAULT_AVG_USED_TOKENS = 0;
 
+    /**
+     * 阈值
+     */
     private double count;
+    /**
+     * 模式，0表示线程数，1表示QPS
+     */
     private int grade;
 
     public DefaultController(double count, int grade) {
@@ -47,24 +54,34 @@ public class DefaultController implements TrafficShapingController {
 
     @Override
     public boolean canPass(Node node, int acquireCount, boolean prioritized) {
+        // 当前资源的通过情况，线程数或者QPS
         int curCount = avgUsedTokens(node);
         if (curCount + acquireCount > count) {
+            // 达到阈值，仅针对QPS模式，且是优先级模式，尝试占用未来的窗口
             if (prioritized && grade == RuleConstant.FLOW_GRADE_QPS) {
                 long currentTime;
                 long waitInMs;
                 currentTime = TimeUtil.currentTimeMillis();
+
+                // 获取占用下一个时间窗口令牌需等待的时间
                 waitInMs = node.tryOccupyNext(currentTime, acquireCount, count);
                 if (waitInMs < OccupyTimeoutProperty.getOccupyTimeout()) {
+                    // 如果小于一个时间窗口的时间500ms，占用邻近下一个窗口的令牌
                     node.addWaitingRequest(currentTime + waitInMs, acquireCount);
                     node.addOccupiedPass(acquireCount);
                     sleep(waitInMs);
 
                     // PriorityWaitException indicates that the request will pass after waiting for {@link @waitInMs}.
+                    /**
+                     * 抛出异常在 {@link StatisticSlot} 中catch处理，当前请求通过流控校验
+                     */
                     throw new PriorityWaitException(waitInMs);
                 }
             }
             return false;
         }
+
+        // 未达到阈值，直接通过
         return true;
     }
 
