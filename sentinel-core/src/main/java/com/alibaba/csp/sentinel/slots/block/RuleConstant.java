@@ -63,7 +63,7 @@ public final class RuleConstant {
     // 这种方式可以平缓拉高系统水位，避免突发流量对当前处于低水位的系统的可用性造成破坏
     // eg：配置阈值为10，预热时间为5秒，则初始阈值为 10 / 3 = 3，5秒后达到10
     public static final int CONTROL_BEHAVIOR_WARM_UP = 1;
-    // 2：排队等待，即请求进入排队队列，根据队列的情况，决定是否限流，可以设置队列大小，当队列满了之后，请求会被拒绝
+    // 2：排队等待，即请求进入排队队列，根据队列的情况，漏桶模型，当前请求进入后判断当前能否直接通过，如果不能看需等待时间是否超过最大等待时间，如果超过则直接失败，否则等待
     public static final int CONTROL_BEHAVIOR_RATE_LIMITER = 2;
     // 3：预热 + 排队等待模式，结合预热模式和排队等待
     public static final int CONTROL_BEHAVIOR_WARM_UP_RATE_LIMITER = 3;

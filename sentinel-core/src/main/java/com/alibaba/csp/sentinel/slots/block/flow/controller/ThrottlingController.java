@@ -35,10 +35,21 @@ public class ThrottlingController implements TrafficShapingController {
 
     private static final long MS_TO_NS_OFFSET = TimeUnit.MILLISECONDS.toNanos(1);
 
+    /**
+     * 最大等待时间
+     */
     private final int maxQueueingTimeMs;
+
+    // 单位时间
     private final int statDurationMs;
 
+    // 单位时间内允许通过的请求数
     private final double count;
+
+    // 漏桶模式
+    // 水流速度 = count / statDurationMs
+
+    // 是否使用纳秒
     private final boolean useNanoSeconds;
 
     private final AtomicLong latestPassedTime = new AtomicLong(-1);
@@ -56,6 +67,7 @@ public class ThrottlingController implements TrafficShapingController {
         this.statDurationMs = statDurationMs;
         // Use nanoSeconds when durationMs%count != 0 or count/durationMs> 1 (to be accurate)
         if (maxCountPerStat > 0) {
+            // 不能整除 或者 速度大于一，则提高精度使用那秒进行计算
             this.useNanoSeconds = statDurationMs % Math.round(maxCountPerStat) != 0 || maxCountPerStat / statDurationMs > 1;
         } else {
             this.useNanoSeconds = false;
@@ -105,9 +117,13 @@ public class ThrottlingController implements TrafficShapingController {
     private boolean checkPassUsingCachedMs(int acquireCount, double maxCountPerStat) {
         long currentTime = TimeUtil.currentTimeMillis();
         // Calculate the interval between every two requests.
+        // 计算两次请求之间允许的最小时间间隔
+        // 速度 = maxCountPerStat / statDurationMs
+        // 本次请求需耗费时间 = acquireCount / 速度 = acquireCount / (maxCountPerStat / statDurationMs) = acquireCount * statDurationMs / maxCountPerStat
         long costTime = Math.round(1.0d * statDurationMs * acquireCount / maxCountPerStat);
 
         // Expected pass time of this request.
+        // 期望的通过时间 = 本次请求需耗费时间 + 上次通过时间
         long expectedTime = costTime + latestPassedTime.get();
 
         if (expectedTime <= currentTime) {
@@ -116,8 +132,10 @@ public class ThrottlingController implements TrafficShapingController {
             return true;
         } else {
             // Calculate the time to wait.
+            // 需要等待时间 = 本次请求需耗费时间 + 上次通过时间 - 当前时间 = 期待通过时间 - 当前时间
             long waitTime = costTime + latestPassedTime.get() - TimeUtil.currentTimeMillis();
             if (waitTime > maxQueueingTimeMs) {
+                // 超过最大等待时间，直接拒绝
                 return false;
             }
 
@@ -146,6 +164,8 @@ public class ThrottlingController implements TrafficShapingController {
         if (count <= 0) {
             return false;
         }
+
+        // 以下两种方式算法相同，区别仅在计算精度上
         if (useNanoSeconds) {
             return checkPassUsingNanoSeconds(acquireCount, this.count);
         } else {
@@ -162,6 +182,10 @@ public class ThrottlingController implements TrafficShapingController {
 
     private void sleepNanos(long ns) {
         LockSupport.parkNanos(ns);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(MS_TO_NS_OFFSET);
     }
 
 }

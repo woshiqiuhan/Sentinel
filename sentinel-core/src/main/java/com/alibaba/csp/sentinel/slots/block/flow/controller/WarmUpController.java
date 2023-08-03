@@ -15,11 +15,11 @@
  */
 package com.alibaba.csp.sentinel.slots.block.flow.controller;
 
-import java.util.concurrent.atomic.AtomicLong;
-
-import com.alibaba.csp.sentinel.util.TimeUtil;
 import com.alibaba.csp.sentinel.node.Node;
 import com.alibaba.csp.sentinel.slots.block.flow.TrafficShapingController;
+import com.alibaba.csp.sentinel.util.TimeUtil;
+
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * <p>
@@ -69,7 +69,9 @@ public class WarmUpController implements TrafficShapingController {
     private int maxToken;
     protected double slope;
 
+    // 当前令牌桶中令牌数
     protected AtomicLong storedTokens = new AtomicLong(0);
+    // 上一次填充令牌桶的时间，存的一定是整秒
     protected AtomicLong lastFilledTime = new AtomicLong(0);
 
     public WarmUpController(double count, int warmUpPeriodInSec, int coldFactor) {
@@ -80,6 +82,35 @@ public class WarmUpController implements TrafficShapingController {
         construct(count, warmUpPeriodInSec, 3);
     }
 
+    /**
+     * count 每秒允许通过的请求数<p/>
+     * warmUpPeriodInSec 预热时长<p/>
+     * coldFactor有关，默认值为3<p/>
+     *
+     * stableInterval 稳定生产一个令牌需要的时间<p/>
+     * coldInterval 生产一个令牌需要的最大时间，与冷启动因子有关<p/>
+     *
+     * thresholdPermits/warningToken 令牌桶中的警戒线，当令牌数高于警戒线时，开始预热<p/>
+     * maxPermits/maxToken 令牌桶中最大的令牌数<p/>
+     * slope 函数图像中斜率
+     *
+     * 关联关系及参数计算公式推导，具体可参考 <a href="https://blog.csdn.net/weixin_39838028/article/details/111003647">博客</a><p/>
+     *  stableInterval = 1 / count<p/>
+     *  coldInterval = stableInterval * coldFactor = coldFactor / count<p/>
+     *
+     *  warmUpPeriodInSec = (stableInterval + coldInterval) * (maxPermits - thresholdPermits) / 2<p/>
+     *  (coldFactor - 1) * (stableInterval * thresholdPermits) = (stableInterval + coldInterval) * (maxPermits - thresholdPermits) / 2 = warmUpPeriodInSec<p/>
+     *
+     *  (coldFactor - 1) * (stableInterval * thresholdPermits) = warmUpPeriodInSec<p/>
+     *  thresholdPermits = warmUpPeriodInSec / stableInterval / (coldFactor - 1) = warmUpPeriodInSec * count / (coldFactor - 1)<p/>
+     *  thresholdPermits = warmUpPeriodInSec * count / (coldFactor - 1)<p/>
+     *
+     *  (stableInterval + coldInterval) * (maxPermits - thresholdPermits) / 2 = warmUpPeriodInSec<p/>
+     *  maxPermits = thresholdPermits + 2 * warmUpPeriodInSec / (stableInterval + coldInterval) = thresholdPermits + 2 * warmUpPeriodInSec * count / (1 + coldFactor)<p/>
+     *
+     *
+     *  slope = (coldInterval - stableInterval) / (maxPermits - thresholdPermits) = (coldFactor - 1) / count / (maxPermits - thresholdPermits)<p/>
+     */
     private void construct(double count, int warmUpPeriodInSec, int coldFactor) {
 
         if (coldFactor <= 1) {
@@ -90,19 +121,26 @@ public class WarmUpController implements TrafficShapingController {
 
         this.coldFactor = coldFactor;
 
-        // thresholdPermits = 0.5 * warmupPeriod / stableInterval.
+        // thresholdPermits = 0.5 * warmUpPeriodInSec / stableInterval.
         // warningToken = 100;
-        warningToken = (int)(warmUpPeriodInSec * count) / (coldFactor - 1);
+        warningToken = (int) (warmUpPeriodInSec * count) / (coldFactor - 1);
         // / maxPermits = thresholdPermits + 2 * warmupPeriod /
         // (stableInterval + coldInterval)
         // maxToken = 200
-        maxToken = warningToken + (int)(2 * warmUpPeriodInSec * count / (1.0 + coldFactor));
+        maxToken = warningToken + (int) (2 * warmUpPeriodInSec * count / (1.0 + coldFactor));
 
         // slope
         // slope = (coldIntervalMicros - stableIntervalMicros) / (maxPermits
         // - thresholdPermits);
         slope = (coldFactor - 1.0) / count / (maxToken - warningToken);
 
+        /**
+         * 假设 count = 100, warmUpPeriodInSec = 5, coldFactor = 3;
+         *
+         * warningToken = 100 * 5 / (3 - 1) = 250
+         * maxToken = 250 + 2 * 5 * 100 / (1 + 3) = 500
+         * slope = (3 - 1) / 100 / (350 - 250) = 0.00008
+         */
     }
 
     @Override
@@ -114,6 +152,7 @@ public class WarmUpController implements TrafficShapingController {
     public boolean canPass(Node node, int acquireCount, boolean prioritized) {
         long passQps = (long) node.passQps();
 
+        // 获取上一秒通过的qps
         long previousQps = (long) node.previousPassQps();
         syncToken(previousQps);
 
@@ -124,6 +163,9 @@ public class WarmUpController implements TrafficShapingController {
             long aboveToken = restToken - warningToken;
             // 消耗的速度要比warning快，但是要比慢
             // current interval = restToken*slope+1/count
+
+            // aboveToken * slope + 1.0 / count 为当前每张令牌产生需要的时间
+            // 1.0 / (aboveToken * slope + 1.0 / count) 当前1s内可以产生的令牌数，即当前可通过的qps
             double warningQps = Math.nextUp(1.0 / (aboveToken * slope + 1.0 / count));
             if (passQps + acquireCount <= warningQps) {
                 return true;
@@ -140,8 +182,11 @@ public class WarmUpController implements TrafficShapingController {
     protected void syncToken(long passQps) {
         long currentTime = TimeUtil.currentTimeMillis();
         currentTime = currentTime - currentTime % 1000;
+
+
         long oldLastFillTime = lastFilledTime.get();
         if (currentTime <= oldLastFillTime) {
+            // 已经填充过了，直接返回
             return;
         }
 
@@ -164,14 +209,36 @@ public class WarmUpController implements TrafficShapingController {
 
         // 添加令牌的判断前提条件:
         // 当令牌的消耗程度远远低于警戒线的时候
+        // 或者当令牌数大于警戒线，且上一窗口通过的qps小于阈值/冷却因子
         if (oldValue < warningToken) {
-            newValue = (long)(oldValue + (currentTime - lastFilledTime.get()) * count / 1000);
+            newValue = (long) (oldValue + (currentTime - lastFilledTime.get()) * count / 1000);
         } else if (oldValue > warningToken) {
-            if (passQps < (int)count / coldFactor) {
-                newValue = (long)(oldValue + (currentTime - lastFilledTime.get()) * count / 1000);
+            if (passQps < (int) count / coldFactor) {
+                newValue = (long) (oldValue + (currentTime - lastFilledTime.get()) * count / 1000);
             }
         }
         return Math.min(newValue, maxToken);
     }
 
+    public static void main(String[] args) {
+        int count = 100, warmUpPeriodInSec = 5, coldFactor = 3;
+
+        int warningToken = (int) (warmUpPeriodInSec * count) / (coldFactor - 1);
+
+        int maxToken = warningToken + (int) (2 * warmUpPeriodInSec * count / (1.0 + coldFactor));
+
+        double slope = (coldFactor - 1.0) / count / (maxToken - warningToken);
+
+
+        /**
+         * warningToken = 250
+         * maxToken = 500
+         * slope = 8.0E-5 = 0.00008
+         */
+
+        System.out.println("warningToken = " + warningToken);
+        System.out.println("maxToken = " + maxToken);
+        System.out.println("slope = " + slope);
+
+    }
 }
