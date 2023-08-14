@@ -155,13 +155,23 @@ public class FlowRuleChecker {
         return null;
     }
 
+    /**
+     * 集群限流处理
+     *
+     * <a href="http://www.hzhcontrols.com/new-34043.html">参考博客</a>
+     */
     private static boolean passClusterCheck(FlowRule rule, Context context, DefaultNode node, int acquireCount,
                                             boolean prioritized) {
         try {
+            // 根据当前集群流控规则是服务端还是客户端，选择对应的服务
+            // 服务端：DefaultEmbeddedTokenServer，负责记录当前规则对应的流控统计信息，并接收客户端请求返回当前请求是否允许通过
+            // 客户端：DefaultClusterTokenClient，负责向服务端发送请求，请求当前资源是否允许通过
             TokenService clusterService = pickClusterService();
             if (clusterService == null) {
+                // 降级到本地限流校验
                 return fallbackToLocalOrPass(rule, context, node, acquireCount, prioritized);
             }
+
             long flowId = rule.getClusterConfig().getFlowId();
             TokenResult result = clusterService.requestToken(flowId, acquireCount, prioritized);
             return applyTokenResult(result, rule, context, node, acquireCount, prioritized);
